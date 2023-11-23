@@ -168,8 +168,21 @@ class ExistingInstallation:
             ntps = []
             for line in lines:
                 if line.startswith("server "):
-                    ntps.append(line[7:].split()[0].strip())
+                    s = line[7:].split()[0].strip()
+                    if any(s.endswith(d) for d in constants.DEFAULT_NTP_DOMAINS):
+                        continue
+                    ntps.append(s)
             results['ntp-servers'] = ntps
+            # ntp-config-method should be set as follows:
+            # 'dhcp' if dhcp was in use, regardless of server configuration
+            # 'manual' if we had existing NTP servers defined (other than default servers)
+            # 'default' if no NTP servers are defined
+            ntp_mode = 'manual' if ntps else 'default'
+            # Determine if dhcp mode was in use
+            if os.path.exists(self.join_state_path('etc/dhcp/dhclient.d/chrony.sh')) and \
+               (os.stat(self.join_state_path('etc/dhcp/dhclient.d/chrony.sh')).st_mode & stat.S_IXUSR):
+                ntp_mode = 'dhcp'
+            results['ntp-config-method'] = ntp_mode
 
             # keyboard:
             keyboard_dict = {}
@@ -215,9 +228,6 @@ class ExistingInstallation:
             if not root_pwd:
                 raise SettingsNotAvailable("no root password found")
             results['root-password'] = ('pwdhash', root_pwd)
-
-            # don't care about this too much.
-            results['ntp-config-method'] = 'default'
 
             # read network configuration.  We only care to find out what the
             # management interface is, and what its configuration was.
